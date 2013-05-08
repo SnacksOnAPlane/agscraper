@@ -10,8 +10,10 @@ def getPodcastMetadata(wsblink)
 	media_id = wsblink.split("/")[-1]
 	stw_url = "http://dmanager.streamtheworld.com/feed_xml/xmlLibrary2.php?requestinfo=1&client_id=1331&check=1Y3iTN8&mediaid=#{media_id}&list_library=1&list_playlists=0&list_categories=0&timestamp=1368042118344"
 	doc = open(stw_url) { |f| Hpricot.XML(f) }
+	file_tag = doc.at("file")
 	return {
-		url: "http://wsbam.media.streamtheworld.com" + doc.at("file").inner_html,
+		url: "http://wsbam.media.streamtheworld.com" + file_tag.inner_html,
+		size: file_tag.attributes['file_size'],
 		date: doc.at("item/date").inner_html
 	}
 end
@@ -57,11 +59,13 @@ loop do
 	end
 end
 
-rss = RSS::Maker.make("atom") do |maker|
+rss = RSS::Maker.make("2.0") do |maker|
 	maker.channel.author = "Adam Goldfein"
 	maker.channel.updated = Time.now.to_s
 	maker.channel.about = "http://www.adamgoldfein.com"
 	maker.channel.title = "Adam Goldfein"
+	maker.channel.description = maker.channel.title
+	maker.channel.link = maker.channel.about
 
 	podcasts.each do |podcast|
 		podcast[:files].each_with_index do |file, index|
@@ -69,7 +73,14 @@ rss = RSS::Maker.make("atom") do |maker|
 				item.link = file[:url]
 				item.title = podcast[:title] + " Hour #{index+1}"
 				item.description = podcast[:description]
+				item.itunes_summary = item.description
 				item.updated = file[:date]
+				item.guid.content = item.link
+				item.guid.isPermaLink = true
+				item.pubDate = file[:date]
+				item.enclosure.url = item.link
+				item.enclosure.length = file[:size]
+				item.enclosure.type = 'audio/mpeg'
 			end
 		end
 	end
