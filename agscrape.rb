@@ -43,8 +43,19 @@ def extractPodcasts(page)
 	articles.map{|article| extractPodcast(article)}
 end
 
-doc = open("http://adamgoldfein.com/") { |f| Hpricot(f) }
-podcasts = extractPodcasts(doc)
+i=0
+podcasts = []
+loop do
+	i+=1
+	begin
+		url = "http://adamgoldfein.com/page/#{i}/"
+		puts url
+		doc = open(url) { |f| Hpricot(f) }
+		podcasts.concat(extractPodcasts(doc))
+	rescue
+		break
+	end
+end
 
 rss = RSS::Maker.make("atom") do |maker|
 	maker.channel.author = "Adam Goldfein"
@@ -64,4 +75,4 @@ rss = RSS::Maker.make("atom") do |maker|
 	end
 end
 
-puts rss
+File.open("adamgoldfein.rss", "w") { |file| file.write(rss) }
