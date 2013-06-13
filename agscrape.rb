@@ -32,6 +32,11 @@ def extractPodcast(article)
 	title = main_link.attributes['title']
 	link = main_link.attributes['href']
 	files = getPodcastFiles(link)
+	files.each do |f|
+		if $podcastUrls.include?(f[:url])
+			raise "Already scraped"
+		end
+	end
 	description = article.at("p").inner_html
 	return {
 		title: title,
@@ -44,6 +49,16 @@ def extractPodcasts(page)
 	articles = page/"article"
 	articles.map{|article| extractPodcast(article)}
 end
+
+def populateSavedPodcasts(url)
+	open(url) do |rss|
+		feed = RSS::Parser.parse(rss)
+		$savedPodcasts = feed.items
+		$podcastUrls = Set.new(feed.items.map { |item| item.link })
+	end
+end
+
+populateSavedPodcasts(ARGV[0])
 
 i=0
 podcasts = []
@@ -82,6 +97,21 @@ rss = RSS::Maker.make("2.0") do |maker|
 				item.enclosure.length = file[:size]
 				item.enclosure.type = 'audio/mpeg'
 			end
+		end
+	end
+
+	$savedPodcasts.each do |rssitem|
+		maker.items.new_item do |item|
+			item.link = rssitem.link
+			item.title = rssitem.title
+			item.description = rssitem.description
+			item.itunes_summary = rssitem.itunes_summary
+			item.guid.content = rssitem.link
+			item.guid.isPermaLink = true
+			item.pubDate = rssitem.pubDate
+			item.enclosure.url = rssitem.link
+			item.enclosure.length = rssitem.enclosure.length
+			item.enclosure.type = 'audio/mpeg'
 		end
 	end
 end
