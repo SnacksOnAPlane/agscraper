@@ -6,6 +6,9 @@ require 'open-uri'
 require 'pry'
 require "rss"
 
+class AlreadySeenException < Exception
+end
+
 def getPodcastMetadata(wsblink)
 	media_id = wsblink.split("/")[-1]
 	stw_url = "http://dmanager.streamtheworld.com/feed_xml/xmlLibrary2.php?requestinfo=1&client_id=1331&check=1Y3iTN8&mediaid=#{media_id}&list_library=1&list_playlists=0&list_categories=0&timestamp=1368042118344"
@@ -34,7 +37,10 @@ def extractPodcast(article)
 	files = getPodcastFiles(link)
 	files.each do |f|
 		if $podcastUrls.include?(f[:url])
-			raise "Already scraped"
+			$consecutiveErrors += 1
+			raise AlreadySeenException, f[:url]
+		else
+			$consecutiveErrors = 0
 		end
 	end
 	description = article.at("p").inner_html
@@ -47,7 +53,17 @@ end
 
 def extractPodcasts(page)
 	articles = page/"article"
-	articles.map{|article| extractPodcast(article)}
+	retme = articles.map do |article|
+		begin
+			extractPodcast(article)
+		rescue AlreadySeenException => e
+			puts e.message
+			if $consecutiveErrors > 5
+				raise e
+			end
+		end
+	end
+	retme.reject { |article| article.nil? }
 end
 
 def populateSavedPodcasts(url)
@@ -69,7 +85,7 @@ loop do
 		puts url
 		doc = open(url) { |f| Hpricot(f) }
 		podcasts.concat(extractPodcasts(doc))
-	rescue
+	rescue AlreadySeenException => e
 		break
 	end
 end
