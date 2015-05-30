@@ -122,7 +122,7 @@ podcasts = []
 loop do
 	i+=1
 	begin
-		url = "http://adamgoldfein.com/page/#{i}/"
+		url = "http://adamgoldfein.com/category/blog/page/#{i}/"
 		puts url
 		doc = open(url) { |f| Hpricot(f) }
 		podcasts.concat(extractPodcasts(doc))
