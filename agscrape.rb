@@ -5,27 +5,68 @@ require 'hpricot'
 require 'open-uri'
 require 'pry'
 require "rss"
+require 'time'
 
 class AlreadySeenException < Exception
 end
 
-def getPodcastMetadata(wsblink)
-	media_id = wsblink.split("/")[-1]
-	stw_url = "http://dmanager.streamtheworld.com/feed_xml/xmlLibrary2.php?requestinfo=1&client_id=1331&check=1Y3iTN8&mediaid=#{media_id}&list_library=1&list_playlists=0&list_categories=0&timestamp=1368042118344"
-	doc = open(stw_url) { |f| Hpricot.XML(f) }
-	file_tag = doc.at("file")
+def getFileUrl(js)
+  js.split("\n").each do |line|
+    match = /_stwVar\['fileurl'\]= '(.*)';/.match(line)
+    return match[1] if match
+  end
+end
+
+def getSTWMetadata(media_id)
+  stw_url = "http://dmanager.streamtheworld.com/feed_xml/xmlLibrary2.php?requestinfo=1&client_id=1331&check=1Y3iTN8&mediaid=#{media_id}&list_library=1&list_playlists=0&list_categories=0&timestamp=1368042118344"
+  doc = open(stw_url) { |f| Hpricot.XML(f) }
+  file_tag = doc.at("file")
+  {
+    url: "http://wsbam.media.streamtheworld.com" + file_tag.inner_html,
+    size: file_tag.attributes['file_size'],
+    date: doc.at("item/date").inner_html
+  }
+end
+
+def parseDate(link_text)
+  matches = /(\d+)[\/\-](\d+)[\/\-](\d+)/.match(link_text)
+  return nil if not matches
+  month = matches[1].to_i
+  day = matches[2].to_i
+  year = ("20"+matches[3]).to_i
+  Date.new(year, month, day).rfc2822
+end
+
+def getPodcastMetadata(link)
+  url = link.attributes['href']
+  puts url
+  if url.start_with?('http://www.wsbradio.com/Player')
+    media_id = url.split("/")[-1]
+    data = getSTWMetadata(media_id)
+    puts data
+    return data
+  elsif not url.end_with?('mp3')
+    doc = open(url) { |f| Hpricot(f) }
+    script = doc.search("script")[1].inner_html
+    url = getFileUrl(script)
+    puts url
+  end
+  puts link.inner_html
+  date = parseDate(link.inner_html)
+  puts date
 	return {
-		url: "http://wsbam.media.streamtheworld.com" + file_tag.inner_html,
-		size: file_tag.attributes['file_size'],
-		date: doc.at("item/date").inner_html
+		url: url,
+		size: 30000000, # we no longer get a valid size
+		date: date
 	}
 end
 
-def getPodcastFiles(link)
-	page = open(link) { |f| Hpricot(f) }
-	podcasts = page.search("a[text()*='Podcast -']")
+def getPodcastFiles(blogpage)
+  puts blogpage
+	page = open(blogpage) { |f| Hpricot(f) }
+	podcasts = page.search("div.text a[text()*='Podcast']")
 	if !podcasts.empty?
-		return podcasts.map{|a| getPodcastMetadata(a.attributes['href'])}
+		return podcasts.map{|a| getPodcastMetadata(a)}.compact
 	end
 	return []
 end
@@ -74,7 +115,7 @@ def populateSavedPodcasts(url)
 	end
 end
 
-populateSavedPodcasts(ARGV[0])
+populateSavedPodcasts("https://raw.githubusercontent.com/SnacksOnAPlane/agscraper/master/adamgoldfein.rss")
 
 i=0
 podcasts = []
